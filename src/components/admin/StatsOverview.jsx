@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { Store, Users, UserCheck, FileText, Activity, Trophy } from 'lucide-react';
 import useFetch from '../../hooks/useFetch';
 import StatsCard from '../ui/StatsCard';
@@ -30,14 +31,17 @@ function useAnimatedCounter(target, duration = 1200) {
   return count;
 }
 
-function AnimatedStatsCard({ title, value, icon, color, delay }) {
+function AnimatedStatsCard({ title, value, icon, color, delay, link }) {
   const animatedValue = useAnimatedCounter(value);
+  const navigate = useNavigate();
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay, ease: 'easeOut' }}
+      onClick={() => link && navigate(link)}
+      className={link ? 'cursor-pointer' : ''}
     >
       <StatsCard
         title={title}
@@ -71,12 +75,12 @@ export default function StatsOverview() {
   const stats = data || {};
 
   const cards = [
-    { title: 'Total Merchants', key: 'totalMerchants', icon: Store, color: '#e94560' },
-    { title: 'Total Promoters', key: 'totalPromoters', icon: Users, color: '#6366f1' },
-    { title: 'Total Customers', key: 'totalCustomers', icon: UserCheck, color: '#10b981' },
-    { title: 'Total Submissions', key: 'totalSubmissions', icon: FileText, color: '#f59e0b' },
-    { title: 'Active Merchants', key: 'activeMerchants', icon: Activity, color: '#06b6d4' },
-    { title: 'Active Contests', key: 'activeContests', icon: Trophy, color: '#8b5cf6' },
+    { title: 'Total Merchants', key: 'totalMerchants', icon: Store, color: '#e94560', link: '/admin/merchants' },
+    { title: 'Total Promoters', key: 'totalPromoters', icon: Users, color: '#6366f1', link: '/admin/promoters' },
+    { title: 'Total Customers', key: 'totalCustomers', icon: UserCheck, color: '#10b981', link: '/admin/customers' },
+    { title: 'Total Submissions', key: 'totalSubmissions', icon: FileText, color: '#f59e0b', link: '/admin/contests' },
+    { title: 'Active Merchants', key: 'activeMerchants', icon: Activity, color: '#06b6d4', link: '/admin/merchants' },
+    { title: 'Active Contests', key: 'activeContests', icon: Trophy, color: '#8b5cf6', link: '/admin/contests' },
   ];
 
   return (
@@ -99,6 +103,7 @@ export default function StatsOverview() {
             icon={card.icon}
             color={card.color}
             delay={i * 0.08}
+            link={card.link}
           />
         ))}
       </div>

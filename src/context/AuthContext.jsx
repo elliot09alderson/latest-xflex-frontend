@@ -6,20 +6,20 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
-      const stored = localStorage.getItem('xflex_user');
+      const stored = localStorage.getItem('zxcom_user');
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
     }
   });
 
-  const [token, setToken] = useState(() => localStorage.getItem('xflex_token'));
+  const [token, setToken] = useState(() => localStorage.getItem('zxcom_token'));
 
   const persist = useCallback((userData, authToken) => {
     setUser(userData);
     setToken(authToken);
-    localStorage.setItem('xflex_user', JSON.stringify(userData));
-    localStorage.setItem('xflex_token', authToken);
+    localStorage.setItem('zxcom_user', JSON.stringify(userData));
+    localStorage.setItem('zxcom_token', authToken);
   }, []);
 
   const login = useCallback(async (phone, password) => {
@@ -39,8 +39,8 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('xflex_user');
-    localStorage.removeItem('xflex_token');
+    localStorage.removeItem('zxcom_user');
+    localStorage.removeItem('zxcom_token');
   }, []);
 
   const value = useMemo(

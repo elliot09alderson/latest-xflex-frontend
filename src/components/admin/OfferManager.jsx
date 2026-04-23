@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Pencil, Trash2, Gift } from 'lucide-react';
+import { Plus, Pencil, Gift } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../config/api';
 import useFetch from '../../hooks/useFetch';
@@ -30,8 +30,6 @@ export default function OfferManager() {
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [deleting, setDeleting] = useState(false);
 
   const offers = data?.offers || [];
 
@@ -115,21 +113,33 @@ export default function OfferManager() {
     }
   }, [form, editId, refetch]);
 
-  const handleDelete = useCallback(async () => {
-    if (!deleteConfirm) return;
-    setDeleting(true);
-
+  const handleDelete = async (row) => {
     try {
-      await api.delete(`/admin/offers/${deleteConfirm}`);
-      toast.success('Offer deleted successfully');
-      setDeleteConfirm(null);
+      await api.delete(`/admin/offers/${row._id || row.id}`);
+      toast.success('Offer deleted');
       refetch();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to delete offer');
-    } finally {
-      setDeleting(false);
     }
-  }, [deleteConfirm, refetch]);
+  };
+  const handleBulkDelete = async (rows) => {
+    try {
+      await api.post('/admin/offers/bulk-delete', { ids: rows.map((r) => r._id || r.id) });
+      toast.success(`Deleted ${rows.length} offers`);
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Bulk delete failed');
+    }
+  };
+  const handleDeleteAll = async () => {
+    try {
+      await api.delete('/admin/offers');
+      toast.success('All offers deleted');
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Delete all failed');
+    }
+  };
 
   const getStatusVariant = (status) => {
     const map = { active: 'success', draft: 'default', expired: 'danger', upcoming: 'info' };
@@ -160,22 +170,16 @@ export default function OfferManager() {
     },
     {
       key: 'actions',
-      label: 'Actions',
+      label: 'Edit',
+      exportable: false,
       render: (_, row) => (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => openEdit(row)}
-            className="p-1.5 rounded-lg text-white/50 hover:text-blue-400 hover:bg-blue-400/10 transition-all cursor-pointer"
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setDeleteConfirm(row._id || row.id)}
-            className="p-1.5 rounded-lg text-white/50 hover:text-red-400 hover:bg-red-400/10 transition-all cursor-pointer"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
+        <button
+          onClick={() => openEdit(row)}
+          className="p-1.5 rounded-lg text-white/50 hover:text-blue-400 hover:bg-blue-400/10 transition-all cursor-pointer"
+          title="Edit offer"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
       ),
     },
   ];
@@ -208,15 +212,21 @@ export default function OfferManager() {
 
       {error ? (
         <div className="text-center py-8 text-red-400 text-sm">{error}</div>
-      ) : offers.length === 0 ? (
-        <EmptyState
-          icon={Gift}
-          title="No offers yet"
-          description="Create your first promotional offer to get started."
-          action={{ label: 'Create Offer', icon: Plus, onClick: openCreate }}
-        />
       ) : (
-        <DataTable columns={columns} data={offers} />
+        <DataTable
+          columns={columns}
+          data={offers}
+          title="Offers"
+          exportFilename="offers"
+          searchable
+          searchFields={['title', 'description', 'prize_description']}
+          searchPlaceholder="Search offers..."
+          exportable
+          onDelete={handleDelete}
+          onBulkDelete={handleBulkDelete}
+          onDeleteAll={handleDeleteAll}
+          emptyMessage="No offers yet. Create your first promotional offer above."
+        />
       )}
 
       {/* Create / Edit Modal */}
@@ -302,25 +312,6 @@ export default function OfferManager() {
         </form>
       </Modal>
 
-      {/* Delete Confirmation */}
-      <Modal
-        isOpen={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        title="Delete Offer"
-        size="sm"
-      >
-        <p className="text-white/70 text-sm mb-6">
-          Are you sure you want to delete this offer? This action cannot be undone.
-        </p>
-        <div className="flex justify-end gap-3">
-          <Button variant="ghost" onClick={() => setDeleteConfirm(null)}>
-            Cancel
-          </Button>
-          <Button variant="danger" loading={deleting} onClick={handleDelete}>
-            Delete
-          </Button>
-        </div>
-      </Modal>
     </motion.div>
   );
 }

@@ -1,10 +1,14 @@
 import { motion } from 'framer-motion';
-import { Crown, Gem, QrCode, Download, CheckCircle, XCircle } from 'lucide-react';
+import { Crown, Gem, QrCode, Download, Printer, CheckCircle, XCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
 import useFetch from '../../hooks/useFetch';
 import GlassCard from '../ui/GlassCard';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Spinner from '../ui/Spinner';
+
+const API_BASE = import.meta.env.VITE_API_URL?.replace('/api', '') || '';
+const fullUrl = (url) => url ? (url.startsWith('http') ? url : `${API_BASE}${url}`) : '';
 
 const planDetails = {
   basic: { icon: Crown, color: '#3b82f6', price: '₹1,000/month' },
@@ -34,18 +38,46 @@ export default function PlanInfo() {
   const planType = profile.plan_type || 'basic';
   const plan = planDetails[planType] || planDetails.basic;
   const PlanIcon = plan.icon;
-  const isActive = profile.status === 'active' || profile.is_active;
-  const qrCode = profile.qr_code || profile.qr_code_url;
+  const isActive = profile.status === 'active';
 
-  const handleDownloadQR = () => {
-    if (!qrCode) return;
-    const link = document.createElement('a');
-    link.href = qrCode;
-    link.download = `xflex-qr-${profile.shop_name || 'merchant'}.png`;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // QR code from populated assigned_qr_code_id
+  const qrData = profile.assigned_qr_code_id || {};
+  const qrImageUrl = fullUrl(qrData.qr_image_url || '');
+  const qrCode = qrData.code || '';
+
+  const handleDownloadQR = async () => {
+    if (!qrImageUrl) { toast.error('QR not available'); return; }
+    try {
+      const resp = await fetch(qrImageUrl);
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `zxcom-qr-${profile.shop_name || 'merchant'}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      toast.success('QR downloaded!');
+    } catch { toast.error('Download failed'); }
+  };
+
+  const handlePrintQR = () => {
+    if (!qrImageUrl) { toast.error('QR not available'); return; }
+    const win = window.open('', '_blank');
+    win.document.write(`
+      <html><head><title>QR - ${profile.shop_name}</title>
+      <style>body{display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;font-family:sans-serif;}
+      .card{text-align:center;padding:30px;}img{width:300px;height:300px;}
+      p{margin:8px 0 0;color:#555;font-size:14px;}.name{font-size:18px;font-weight:bold;color:#333;}</style></head>
+      <body><div class="card">
+      <p class="name">${profile.shop_name || ''}</p>
+      <img src="${qrImageUrl}" />
+      <p>${qrCode}</p>
+      </div></body></html>
+    `);
+    win.document.close();
+    win.onload = () => { win.print(); };
   };
 
   return (
@@ -70,7 +102,7 @@ export default function PlanInfo() {
 
         <div className="space-y-1">
           <p className="text-xs text-white/40 uppercase tracking-wider">Price</p>
-          <p className="text-sm font-semibold text-white">{plan.price}</p>
+          <p className="text-sm font-semibold text-white">₹{profile.plan_price || '--'}</p>
         </div>
 
         <div className="space-y-1">
@@ -94,10 +126,20 @@ export default function PlanInfo() {
           <p className="text-xs text-white/40 uppercase tracking-wider">Shop</p>
           <p className="text-sm font-semibold text-white">{profile.shop_name || '--'}</p>
         </div>
+
+        <div className="space-y-1">
+          <p className="text-xs text-white/40 uppercase tracking-wider">Submissions</p>
+          <p className="text-sm font-semibold text-white">{profile.current_month_submissions ?? 0} / {profile.monthly_submission_cap ?? 0}</p>
+        </div>
+
+        <div className="space-y-1">
+          <p className="text-xs text-white/40 uppercase tracking-wider">Payment</p>
+          <Badge text={profile.payment_status || 'pending'} variant={profile.payment_status === 'paid' ? 'success' : 'warning'} />
+        </div>
       </div>
 
       {/* QR Code */}
-      {qrCode && (
+      {qrImageUrl ? (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -112,22 +154,29 @@ export default function PlanInfo() {
           <div className="flex flex-col items-center gap-4">
             <div className="p-4 bg-white rounded-2xl shadow-lg">
               <img
-                src={qrCode}
+                src={qrImageUrl}
                 alt="Merchant QR Code"
                 className="w-48 h-48 object-contain"
               />
             </div>
-
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={Download}
-              onClick={handleDownloadQR}
-            >
-              Download QR Code
-            </Button>
+            {qrCode && (
+              <p className="text-sm font-mono text-[#e94560]">{qrCode}</p>
+            )}
+            <div className="flex gap-3">
+              <Button variant="secondary" size="sm" icon={Download} onClick={handleDownloadQR}>
+                Download
+              </Button>
+              <Button variant="secondary" size="sm" icon={Printer} onClick={handlePrintQR}>
+                Print
+              </Button>
+            </div>
           </div>
         </motion.div>
+      ) : (
+        <div className="border-t border-white/10 pt-6 text-center">
+          <QrCode className="w-8 h-8 text-white/10 mx-auto mb-2" />
+          <p className="text-xs text-white/30">No QR code assigned yet</p>
+        </div>
       )}
     </GlassCard>
   );

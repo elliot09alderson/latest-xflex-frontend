@@ -32,7 +32,7 @@ export default function useRazorpay() {
       amount,
       currency: 'INR',
       order_id,
-      name: 'X-Flex',
+      name: 'Zxcom',
       description: 'Gym Membership Payment',
       handler,
       prefill: {

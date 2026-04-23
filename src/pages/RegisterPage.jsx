@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import PublicLayout from '../components/layout/PublicLayout';
 import RegisterForm from '../components/auth/RegisterForm';
+import Seo from '../components/seo/Seo';
 
 const orbs = [
   { size: 300, x: '15%', y: '25%', color: '#e94560', delay: 0 },
@@ -12,6 +13,12 @@ const orbs = [
 export default function RegisterPage() {
   return (
     <PublicLayout>
+      <Seo
+        title="Create Account"
+        description="Create a ZXCOM account to shop premium apparel, track orders and get exclusive member deals."
+        path="/register"
+        noindex
+      />
       <div className="relative min-h-[calc(100vh-140px)] flex items-center justify-center px-4 py-12 overflow-hidden">
         {/* Floating gradient orbs */}
         {orbs.map((orb, i) => (

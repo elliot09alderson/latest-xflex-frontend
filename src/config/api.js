@@ -5,7 +5,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('xflex_token');
+  const token = localStorage.getItem('zxcom_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -14,8 +14,8 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('xflex_token');
-      localStorage.removeItem('xflex_user');
+      localStorage.removeItem('zxcom_token');
+      localStorage.removeItem('zxcom_user');
       window.location.href = '/login';
     }
     return Promise.reject(error);

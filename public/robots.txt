@@ -1,0 +1,31 @@
+# robots.txt for zxcom.in
+# Allow general crawlers to index public content.
+# Disallow authenticated surfaces (dashboards + auth forms + personal QR scan landing).
+
+User-agent: *
+Allow: /
+
+# Auth pages (thin, noindex'd at page level too)
+Disallow: /login
+Disallow: /register
+
+# Per-user QR scan landing — dynamic + not evergreen
+Disallow: /scan/
+
+# Checkout — behind login, no useful crawlable content
+Disallow: /checkout
+
+# Role-gated dashboards — not public content
+Disallow: /merchant
+Disallow: /merchant/
+Disallow: /promoter
+Disallow: /promoter/
+Disallow: /admin
+Disallow: /admin/
+
+# Media / assets
+Allow: /favicon.svg
+Allow: /icons.svg
+Allow: /products/
+
+Sitemap: https://zxcom.in/sitemap.xml

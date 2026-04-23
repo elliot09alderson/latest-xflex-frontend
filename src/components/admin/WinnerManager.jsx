@@ -57,6 +57,34 @@ export default function WinnerManager() {
     }
   }, [winners, refetch]);
 
+  const handleDelete = async (row) => {
+    try {
+      await api.delete(`/admin/winners/${row._id || row.id}`);
+      toast.success('Winner deleted');
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete');
+    }
+  };
+  const handleBulkDelete = async (rows) => {
+    try {
+      await api.post('/admin/winners/bulk-delete', { ids: rows.map((r) => r._id || r.id) });
+      toast.success(`Deleted ${rows.length} winners`);
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Bulk delete failed');
+    }
+  };
+  const handleDeleteAll = async () => {
+    try {
+      await api.delete('/admin/winners');
+      toast.success('All winners deleted');
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Delete all failed');
+    }
+  };
+
   const columns = [
     {
       key: 'name',
@@ -99,6 +127,7 @@ export default function WinnerManager() {
     {
       key: 'actions',
       label: 'Actions',
+      exportable: false,
       render: (_, row) => {
         const id = row._id || row.id;
         const isPublished = row.published || row.status === 'published';
@@ -169,14 +198,20 @@ export default function WinnerManager() {
 
       {error ? (
         <div className="text-center py-8 text-red-400 text-sm">{error}</div>
-      ) : winners.length === 0 ? (
-        <EmptyState
-          icon={Award}
-          title="No winners yet"
-          description="Winners will appear here once contest draws are performed."
-        />
       ) : (
-        <DataTable columns={columns} data={winners} />
+        <DataTable
+          columns={columns}
+          data={winners}
+          title="Winners"
+          exportFilename="winners"
+          searchable
+          searchPlaceholder="Search winners..."
+          exportable
+          onDelete={handleDelete}
+          onBulkDelete={handleBulkDelete}
+          onDeleteAll={handleDeleteAll}
+          emptyMessage="No winners yet. They'll appear here once contest draws are performed."
+        />
       )}
     </motion.div>
   );

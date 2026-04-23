@@ -76,7 +76,7 @@ export default function QRManager() {
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = `xflex-qr-${qr.code || qr._id || 'code'}.png`;
+      link.download = `zxcom-qr-${qr.code || qr._id || 'code'}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

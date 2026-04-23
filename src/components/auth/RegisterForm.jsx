@@ -1,20 +1,22 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Store, Users, User, Phone, Lock, Mail, MapPin,
   Building2, Tag, ArrowLeft, ArrowRight, UserPlus,
-  CreditCard, Banknote, CheckCircle, Copy, Wallet,
+  CheckCircle, Copy,
+  Hash, MapPinned, Navigation, ShoppingBag,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../config/api';
-import useRazorpay from '../../hooks/useRazorpay';
 import GlassCard from '../ui/GlassCard';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import FileUpload from '../ui/FileUpload';
 import Button from '../ui/Button';
+import TermsAndConditions from '../ui/TermsAndConditions';
+import PromoterPerks from '../ui/PromoterPerks';
 
 const slideVariants = {
   enter: (direction) => ({
@@ -43,12 +45,17 @@ export default function RegisterForm() {
   const [direction, setDirection] = useState(1);
   const [role, setRole] = useState('');
   const [loading, setLoading] = useState(false);
-  const [paymentMode, setPaymentMode] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [registrationDone, setRegistrationDone] = useState(false);
   const [employeeId, setEmployeeId] = useState('');
   const { register } = useAuth();
-  const { initiatePayment } = useRazorpay();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const refCode = searchParams.get('ref') || '';
+  // `?type=business` switches step-1 to merchant/promoter only. Default
+  // (no query) is the shopper signup — we auto-skip the role picker.
+  const registerType = searchParams.get('type') === 'business' ? 'business' : 'shopper';
 
   const [form, setForm] = useState({
     name: '',
@@ -61,12 +68,36 @@ export default function RegisterForm() {
     shop_name: '',
     area: '',
     city: '',
+    pincode: '',
     shop_category: '',
+    shop_size: '',
+    gstin: '',
+    lat: '',
+    lng: '',
+    shop_image: null,
     // Promoter fields
-    referral_code: '',
+    referral_code: refCode,
   });
 
-  const totalSteps = role === 'promoter' ? 3 : 2;
+  // Deep-link handling:
+  //   /register?ref=XXX            → pre-select promoter, skip to step 2
+  //   /register (no query)         → default to shopper signup, skip step 1
+  //   /register?type=business      → show merchant/promoter tile picker
+  useEffect(() => {
+    if (step !== 1) return;
+    if (refCode) {
+      setRole('promoter');
+      setStep(2);
+      return;
+    }
+    if (registerType === 'shopper') {
+      setRole('customer');
+      setStep(2);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refCode, registerType]);
+
+  const totalSteps = 2;
 
   const updateField = (e) => {
     const { name, value, files } = e.target;
@@ -75,6 +106,49 @@ export default function RegisterForm() {
     } else {
       setForm((prev) => ({ ...prev, [name]: value }));
     }
+  };
+
+  // Reverse geocode
+  const fetchPincode = useCallback(async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+      );
+      const data = await res.json();
+      const addr = data?.address || {};
+      const pincode = addr.postcode || '';
+      const city = addr.city || addr.town || addr.village || addr.county || '';
+      const area = addr.suburb || addr.neighbourhood || addr.road || '';
+      setForm((prev) => ({
+        ...prev,
+        pincode: pincode || prev.pincode,
+        city: city || prev.city,
+        area: area || prev.area,
+        address: data?.display_name || prev.address,
+      }));
+      if (pincode) toast.success(`Location detected! Pincode: ${pincode}`);
+      else toast.success('Location detected! Pincode not found — enter manually.');
+    } catch {
+      toast.error('Could not fetch address from location');
+    }
+  }, []);
+
+  const getLiveLocation = () => {
+    if (!navigator.geolocation) { toast.error('Geolocation is not supported'); return; }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        setForm((prev) => ({ ...prev, lat: latitude.toString(), lng: longitude.toString() }));
+        await fetchPincode(latitude, longitude);
+        setLocating(false);
+      },
+      (err) => {
+        setLocating(false);
+        toast.error(err.code === 1 ? 'Location permission denied.' : 'Could not get your location.');
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
   };
 
   const goToStep = (target) => {
@@ -88,9 +162,24 @@ export default function RegisterForm() {
     setStep(2);
   };
 
-  // Create user account (auth register) and then promoter record
+  // Upload avatar (non-blocking — don't let this fail registration)
+  const uploadAvatar = async (token) => {
+    if (!form.avatar) return;
+    try {
+      const fd = new FormData();
+      fd.append('avatar', form.avatar);
+      await api.put('/auth/profile', fd, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
+      });
+    } catch {
+      // Avatar upload failed — not critical, continue registration
+      console.warn('Avatar upload failed, continuing registration');
+    }
+  };
+
   const createAccountAndPromoter = async (token) => {
-    // Register as promoter
+    // Self-registration: no pack_id. Backend grants 100 merchant credits
+    // and auto-activates the promoter.
     const { data: promoterRes } = await api.post('/promoters/register', {
       referral_code: form.referral_code || undefined,
     }, {
@@ -98,6 +187,10 @@ export default function RegisterForm() {
     });
 
     const empId = promoterRes?.data?.promoter?.employee_id || promoterRes?.promoter?.employee_id || promoterRes?.employee_id || '';
+
+    // Upload avatar AFTER promoter record is created (non-blocking)
+    await uploadAvatar(token);
+
     return empId;
   };
 
@@ -114,13 +207,11 @@ export default function RegisterForm() {
       return;
     }
 
-    if (role === 'promoter') {
-      // For promoter: go to payment step
-      goToStep(3);
+    if (role === 'promoter' && !termsAccepted) {
+      toast.error('Please accept the Promoter Terms & Conditions to continue');
       return;
     }
 
-    // For merchant: register directly
     setLoading(true);
     try {
       const payload = {
@@ -132,111 +223,26 @@ export default function RegisterForm() {
         address: form.address || undefined,
       };
 
-      await register(payload);
-      toast.success('Account created successfully!');
-      navigate('/merchant');
+      const res = await register(payload);
+      const token = res?.data?.token || localStorage.getItem('zxcom_token');
+
+      if (role === 'promoter') {
+        const empId = await createAccountAndPromoter(token);
+        setEmployeeId(empId);
+        setRegistrationDone(true);
+        toast.success('Registration successful! You are now an active promoter.');
+      } else if (role === 'merchant') {
+        await uploadAvatar(token);
+        toast.success('Account created successfully!');
+        navigate('/merchant');
+      } else {
+        await uploadAvatar(token);
+        toast.success('Welcome! Happy shopping.');
+        navigate('/');
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle offline registration for promoter
-  const handleOfflineRegister = async () => {
-    setLoading(true);
-    try {
-      const payload = {
-        role: 'promoter',
-        name: form.name,
-        phone: form.phone,
-        password: form.password,
-        email: form.email || undefined,
-        address: form.address || undefined,
-        referral_code: form.referral_code || undefined,
-      };
-
-      const res = await register(payload);
-      const token = res?.data?.token || localStorage.getItem('xflex_token');
-
-      // Create promoter record
-      const empId = await createAccountAndPromoter(token);
-      setEmployeeId(empId);
-      setRegistrationDone(true);
-      toast.success('Registration successful! Pay the fee offline to activate.');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Registration failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle online (Razorpay) registration for promoter
-  const handleOnlineRegister = async () => {
-    setLoading(true);
-    try {
-      // Step 1: Create user account
-      const payload = {
-        role: 'promoter',
-        name: form.name,
-        phone: form.phone,
-        password: form.password,
-        email: form.email || undefined,
-        address: form.address || undefined,
-        referral_code: form.referral_code || undefined,
-      };
-
-      const res = await register(payload);
-      const token = res?.data?.token || localStorage.getItem('xflex_token');
-
-      // Step 2: Create payment order
-      const { data: orderRes } = await api.post('/payments/create-order', {
-        amount: 500,
-        purpose: 'promoter_registration',
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const orderData = orderRes?.data || orderRes;
-
-      // Step 3: Open Razorpay
-      await initiatePayment({
-        amount: orderData.amount,
-        order_id: orderData.order_id,
-        prefill: {
-          name: form.name,
-          email: form.email || '',
-          contact: form.phone,
-        },
-        handler: async (response) => {
-          try {
-            // Step 4: Verify payment
-            await api.post('/payments/verify', {
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-            });
-
-            // Step 5: Register as promoter
-            const empId = await createAccountAndPromoter(token);
-
-            // Step 6: Activate promoter
-            await api.post('/promoters/activate', {}, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-
-            setEmployeeId(empId);
-            setRegistrationDone(true);
-            toast.success('Payment successful! Account activated.');
-          } catch (err) {
-            toast.error(err.response?.data?.message || 'Registration failed after payment');
-          } finally {
-            setLoading(false);
-          }
-        },
-      });
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to initiate payment');
       setLoading(false);
     }
   };
@@ -267,9 +273,7 @@ export default function RegisterForm() {
 
           <h2 className="text-2xl font-bold text-white mb-2">Welcome to the team!</h2>
           <p className="text-white/50 text-sm mb-8">
-            {paymentMode === 'offline'
-              ? 'Your account is created. Pay the registration fee offline to activate.'
-              : 'You are now an official X-Flex promoter'}
+            You are now an official Zxcom promoter with 100 merchant onboarding credits.
           </p>
 
           {employeeId && (
@@ -318,17 +322,18 @@ export default function RegisterForm() {
         className="text-center mb-6"
       >
         <h1 className="text-3xl font-extrabold tracking-tight">
-          <span className="text-white">X</span>
-          <span className="text-[#e94560]">-</span>
           <span className="bg-gradient-to-r from-[#e94560] to-[#c23616] bg-clip-text text-transparent">
-            FLEX
+            ZXCOM
           </span>
         </h1>
         <p className="text-white/40 text-sm mt-1">Create your account</p>
       </motion.div>
 
-      {/* Step Indicator */}
-      <div className="flex items-center justify-center gap-3 mb-8">
+      {/* Step Indicator — hidden when direct-entry (shopper or referral) has
+          already skipped step 1. */}
+      <div className={`flex items-center justify-center gap-3 mb-8 ${
+        registerType !== 'business' ? 'hidden' : ''
+      }`}>
         {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s) => (
           <div key={s} className="flex items-center gap-2">
             <div
@@ -364,7 +369,7 @@ export default function RegisterForm() {
             transition={{ duration: 0.3, ease: 'easeInOut' }}
           >
             <p className="text-center text-white/60 text-sm mb-6">
-              Choose your account type
+              Become a member — choose how you want to partner with Zxcom
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -488,47 +493,45 @@ export default function RegisterForm() {
                   className="space-y-4"
                 >
                   <div className="border-t border-white/10 pt-4">
-                    <p className="text-xs text-[#e94560] font-semibold uppercase tracking-wider mb-3">
-                      Shop Details
-                    </p>
+                    <p className="text-xs text-[#e94560] font-semibold uppercase tracking-wider mb-3">Shop Details</p>
                   </div>
-                  <Input
-                    label="Shop Name"
-                    name="shop_name"
-                    placeholder="Your shop name"
-                    icon={Store}
-                    value={form.shop_name}
-                    onChange={updateField}
-                    required
-                  />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      label="Area"
-                      name="area"
-                      placeholder="Shop area"
-                      icon={MapPin}
-                      value={form.area}
-                      onChange={updateField}
-                      required
-                    />
-                    <Input
-                      label="City"
-                      name="city"
-                      placeholder="City"
-                      icon={Building2}
-                      value={form.city}
-                      onChange={updateField}
-                      required
-                    />
+                  <Input label="Shop Name" name="shop_name" placeholder="Your shop name" icon={Store} value={form.shop_name} onChange={updateField} required />
+                  <FileUpload label="Shop Image" name="shop_image" accept="image/*" preview onChange={updateField} />
+                  <Select label="Shop Category" name="shop_category" placeholder="Select category" options={shopCategories} value={form.shop_category} onChange={updateField} />
+
+                  {/* Shop Size */}
+                  <div className="space-y-1.5">
+                    <label className="block text-sm font-medium text-white/80">Shop Size</label>
+                    <div className="flex gap-2">
+                      {['SM', 'MD', 'LG', 'XL', 'XXL'].map((size) => (
+                        <button key={size} type="button" onClick={() => setForm((p) => ({ ...p, shop_size: size }))}
+                          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border-2 ${form.shop_size === size ? 'border-[#e94560] bg-[#e94560]/10 text-[#e94560]' : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20'}`}>{size}</button>
+                      ))}
+                    </div>
                   </div>
-                  <Select
-                    label="Shop Category"
-                    name="shop_category"
-                    placeholder="Select category"
-                    options={shopCategories}
-                    value={form.shop_category}
-                    onChange={updateField}
-                  />
+
+                  <Input label="GSTIN" name="gstin" placeholder="GSTIN (optional)" icon={Hash} value={form.gstin} onChange={updateField} />
+
+                  {/* Location */}
+                  <div className="border-t border-white/10 pt-4 space-y-4">
+                    <p className="text-xs text-[#e94560] font-semibold uppercase tracking-wider">Location</p>
+                    <Button type="button" variant="secondary" icon={Navigation} loading={locating} onClick={getLiveLocation} fullWidth>
+                      {locating ? 'Getting Location...' : 'Get Live Location'}
+                    </Button>
+                    {form.lat && form.lng && (
+                      <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-3">
+                        <div className="flex items-center gap-2">
+                          <MapPinned className="w-4 h-4 text-emerald-400" />
+                          <p className="text-xs text-emerald-200/80">Location captured: {parseFloat(form.lat).toFixed(6)}, {parseFloat(form.lng).toFixed(6)}</p>
+                        </div>
+                      </motion.div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <Input label="Pincode" name="pincode" placeholder="Pincode" icon={MapPin} value={form.pincode} onChange={updateField} />
+                      <Input label="Area" name="area" placeholder="Shop area" icon={MapPin} value={form.area} onChange={updateField} required />
+                      <Input label="City" name="city" placeholder="City" icon={Building2} value={form.city} onChange={updateField} required />
+                    </div>
+                  </div>
                 </motion.div>
               )}
 
@@ -540,193 +543,74 @@ export default function RegisterForm() {
                   className="space-y-4"
                 >
                   <div className="border-t border-white/10 pt-4">
-                    <p className="text-xs text-[#e94560] font-semibold uppercase tracking-wider mb-3">
-                      Promoter Details
-                    </p>
+                    <p className="text-xs text-[#e94560] font-semibold uppercase tracking-wider mb-3">Promoter Details</p>
                   </div>
                   <Input
-                    label="Referral Code"
+                    label={refCode ? 'Referred By' : 'Referral Code'}
                     name="referral_code"
                     placeholder="Enter referral code (optional)"
                     icon={Tag}
                     value={form.referral_code}
                     onChange={updateField}
+                    readOnly={!!refCode}
                   />
+                  {refCode && (
+                    <p className="text-[11px] text-emerald-400/80 -mt-2">
+                      You&apos;re signing up through a promoter referral.
+                    </p>
+                  )}
+
+                  <PromoterPerks />
+
+                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 text-center">
+                    <p className="text-sm font-semibold text-emerald-200">
+                      You get 100 free merchant onboarding credits on signup
+                    </p>
+                    <p className="text-[11px] text-white/50 mt-1">
+                      No registration fee. Start onboarding shops right after you accept the terms.
+                    </p>
+                  </div>
                 </motion.div>
               )}
 
-              <FileUpload
-                label="Profile Photo"
-                name="avatar"
-                accept="image/*"
-                preview
-                onChange={updateField}
-              />
+              <FileUpload label="Profile Photo" name="avatar" accept="image/*" preview onChange={updateField} />
+
+              {role === 'promoter' && (
+                <div className="border-t border-white/10 pt-5">
+                  <TermsAndConditions
+                    type="promoter"
+                    accepted={termsAccepted}
+                    onAcceptedChange={setTermsAccepted}
+                  />
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
-                <Button
-                  variant="secondary"
-                  icon={ArrowLeft}
-                  onClick={() => goToStep(1)}
-                >
-                  Back
-                </Button>
+                {/* Only show Back when there's a step-1 picker to return to.
+                    Shopper direct-entry and referral auto-select skip step 1. */}
+                {registerType === 'business' && !refCode && (
+                  <Button
+                    variant="secondary"
+                    icon={ArrowLeft}
+                    onClick={() => goToStep(1)}
+                  >
+                    Back
+                  </Button>
+                )}
                 <Button
                   type="submit"
                   fullWidth
                   size="lg"
-                  icon={role === 'promoter' ? ArrowRight : (role === 'merchant' ? Store : UserPlus)}
+                  icon={role === 'merchant' ? Store : (role === 'customer' ? ShoppingBag : UserPlus)}
                   loading={loading}
+                  disabled={role === 'promoter' && !termsAccepted}
                 >
-                  {role === 'promoter' ? 'Next: Payment' : `Create ${role === 'merchant' ? 'Merchant' : ''} Account`}
+                  {role === 'merchant' ? 'Create Merchant Account'
+                    : role === 'customer' ? 'Create Shopper Account'
+                    : 'Create Promoter Account'}
                 </Button>
               </div>
             </form>
-          </motion.div>
-        )}
-
-        {/* Step 3: Payment Mode (Promoter only) */}
-        {step === 3 && role === 'promoter' && (
-          <motion.div
-            key="step3"
-            custom={direction}
-            variants={slideVariants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-          >
-            <div className="space-y-5">
-              <div className="text-center mb-2">
-                <h3 className="text-lg font-bold text-white">Choose Payment Method</h3>
-                <p className="text-sm text-white/40 mt-1">
-                  A one-time registration fee of <span className="text-[#e94560] font-semibold">&#8377;500</span> is required
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Offline Payment */}
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.04, y: -4 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => setPaymentMode('offline')}
-                  className={`
-                    flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all duration-300 cursor-pointer
-                    ${paymentMode === 'offline'
-                      ? 'border-[#e94560] bg-[#e94560]/10 shadow-lg shadow-[#e94560]/20'
-                      : 'border-white/10 bg-white/5 hover:border-[#e94560]/40 hover:bg-white/10'
-                    }
-                  `}
-                >
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/10">
-                    <Banknote className="w-7 h-7 text-amber-400" />
-                  </div>
-                  <span className="text-white font-semibold text-sm">Offline</span>
-                  <span className="text-white/40 text-xs text-center">
-                    Pay cash to admin & get activated
-                  </span>
-                </motion.button>
-
-                {/* Online Payment */}
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.04, y: -4 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => setPaymentMode('online')}
-                  className={`
-                    flex flex-col items-center gap-3 p-5 rounded-2xl border-2 transition-all duration-300 cursor-pointer
-                    ${paymentMode === 'online'
-                      ? 'border-[#e94560] bg-[#e94560]/10 shadow-lg shadow-[#e94560]/20'
-                      : 'border-white/10 bg-white/5 hover:border-[#e94560]/40 hover:bg-white/10'
-                    }
-                  `}
-                >
-                  <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10">
-                    <Wallet className="w-7 h-7 text-emerald-400" />
-                  </div>
-                  <span className="text-white font-semibold text-sm">Online</span>
-                  <span className="text-white/40 text-xs text-center">
-                    Pay via UPI, Cards, Net Banking
-                  </span>
-                </motion.button>
-              </div>
-
-              {/* Payment mode details */}
-              <AnimatePresence mode="wait">
-                {paymentMode === 'offline' && (
-                  <motion.div
-                    key="offline-info"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    className="bg-amber-500/5 border border-amber-500/15 rounded-xl p-4"
-                  >
-                    <p className="text-sm text-amber-200/80">
-                      Your account will be created with <span className="font-semibold">pending</span> status. Contact an admin to complete the payment and activate your account.
-                    </p>
-                  </motion.div>
-                )}
-                {paymentMode === 'online' && (
-                  <motion.div
-                    key="online-info"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    className="bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-4"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <CreditCard className="w-4 h-4 text-emerald-400" />
-                      <p className="text-sm font-medium text-emerald-200/80">Secure Payment via Razorpay</p>
-                    </div>
-                    <p className="text-xs text-white/40">
-                      Supports UPI (GPay, PhonePe, Paytm), Debit/Credit Cards, and Net Banking. Your account will be activated instantly after payment.
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="secondary"
-                  icon={ArrowLeft}
-                  onClick={() => goToStep(2)}
-                >
-                  Back
-                </Button>
-                {paymentMode === 'offline' && (
-                  <Button
-                    fullWidth
-                    size="lg"
-                    icon={UserPlus}
-                    loading={loading}
-                    onClick={handleOfflineRegister}
-                  >
-                    Register (Pay Later)
-                  </Button>
-                )}
-                {paymentMode === 'online' && (
-                  <Button
-                    fullWidth
-                    size="lg"
-                    icon={CreditCard}
-                    loading={loading}
-                    onClick={handleOnlineRegister}
-                  >
-                    Pay &#8377;500 & Register
-                  </Button>
-                )}
-                {!paymentMode && (
-                  <Button
-                    fullWidth
-                    size="lg"
-                    disabled
-                  >
-                    Select a payment method
-                  </Button>
-                )}
-              </div>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>

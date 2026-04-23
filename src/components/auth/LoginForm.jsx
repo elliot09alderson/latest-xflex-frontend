@@ -49,10 +49,8 @@ export default function LoginForm() {
         className="text-center mb-8"
       >
         <h1 className="text-4xl font-extrabold tracking-tight">
-          <span className="text-white">X</span>
-          <span className="text-[#e94560]">-</span>
           <span className="bg-gradient-to-r from-[#e94560] to-[#c23616] bg-clip-text text-transparent">
-            FLEX
+            ZXCOM
           </span>
         </h1>
         <p className="text-white/40 text-sm mt-2">Sign in to your account</p>

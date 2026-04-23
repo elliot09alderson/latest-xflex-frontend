@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Search, CheckCircle, XCircle, Eye, CreditCard, Hash,
-  Store, Shield, Copy, Link2, RefreshCw, Zap, Plus, UserPlus,
+  Store, Shield, Copy, Link2, RefreshCw, Zap, Plus, UserPlus, Lock, KeyRound,
+  Crown, ArrowDownToLine,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../../config/api';
@@ -20,7 +21,6 @@ import Modal from '../ui/Modal';
 
 export default function PromoterManager() {
   const { data, loading, error, refetch } = useFetch('/admin/promoters');
-  const [search, setSearch] = useState('');
   const [selectedPromoter, setSelectedPromoter] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [generatingCode, setGeneratingCode] = useState(false);
@@ -31,26 +31,58 @@ export default function PromoterManager() {
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [recharging, setRecharging] = useState(false);
 
+  // Password change state
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  // Bulk recharge state (credits every active promoter at once)
+  const [showBulkCredit, setShowBulkCredit] = useState(false);
+  const [bulkMerchantCredits, setBulkMerchantCredits] = useState('');
+  const [bulkPromoterCredits, setBulkPromoterCredits] = useState('');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
   // Flatten populated user_id fields
   const promoters = (data?.promoters || []).map((p) => ({
     ...p,
     name: p.user_id?.name || p.name || '',
     phone: p.user_id?.phone || p.phone || '',
+    email: p.user_id?.email || '',
+    address: p.user_id?.address || '',
     avatar_url: p.user_id?.avatar_url || '',
+    referred_by_name: p.referred_by?.name || '',
+    referred_by_phone: p.referred_by?.phone || '',
     shops_count: p.total_shops_count ?? 0,
     promoters_count: p.total_promoters_count ?? 0,
   }));
 
-  const filtered = promoters.filter((p) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      (p.name || '').toLowerCase().includes(q) ||
-      (p.phone || '').toLowerCase().includes(q) ||
-      (p.employee_id || '').toLowerCase().includes(q) ||
-      (p.referral_code || '').toLowerCase().includes(q)
-    );
-  });
+  const handleDelete = async (row) => {
+    try {
+      await api.delete(`/admin/promoters/${row._id}`);
+      toast.success('Promoter deleted');
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete');
+    }
+  };
+  const handleBulkDelete = async (rows) => {
+    try {
+      await api.post('/admin/promoters/bulk-delete', { ids: rows.map((r) => r._id) });
+      toast.success(`Deleted ${rows.length} promoters`);
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Bulk delete failed');
+    }
+  };
+  const handleDeleteAll = async () => {
+    try {
+      await api.delete('/admin/promoters');
+      toast.success('All promoters deleted');
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Delete all failed');
+    }
+  };
 
   const handleActivate = async (promoter) => {
     setActionLoading(true);
@@ -75,6 +107,26 @@ export default function PromoterManager() {
       refetch();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to deactivate');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleRank = async (promoter) => {
+    const isAM = promoter.rank === 'area_manager';
+    const nextRank = isAM ? 'promoter' : 'area_manager';
+    const label = isAM ? 'Demote to Promoter' : 'Promote to Area Manager';
+    if (!window.confirm(`${label} — continue?\n\nArea Managers earn the level-2 override commission on merchants onboarded inside their downline.`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await api.put(`/admin/promoters/${promoter._id || promoter.id}/rank`, { rank: nextRank });
+      toast.success(nextRank === 'area_manager' ? 'Promoted to Area Manager' : 'Demoted to Promoter');
+      setSelectedPromoter((prev) => prev ? { ...prev, rank: nextRank } : prev);
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to change rank');
     } finally {
       setActionLoading(false);
     }
@@ -129,9 +181,61 @@ export default function PromoterManager() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!newPassword || newPassword.length < 4) {
+      toast.error('Password must be at least 4 characters');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const userId = selectedPromoter.user_id?._id || selectedPromoter.user_id;
+      await api.put(`/admin/users/${userId}/password`, { new_password: newPassword });
+      toast.success('Password changed successfully');
+      setNewPassword('');
+      setShowPasswordChange(false);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to change password');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     toast.success('Copied!');
+  };
+
+  const handleBulkRecharge = async () => {
+    const mc = Number(bulkMerchantCredits) || 0;
+    const pc = Number(bulkPromoterCredits) || 0;
+    if (mc <= 0 && pc <= 0) {
+      toast.error('Enter at least one positive amount');
+      return;
+    }
+    const activeCount = promoters.filter((p) => p.status === 'active').length;
+    if (!window.confirm(
+      `Grant every active promoter (${activeCount}):\n` +
+      (mc ? `  • +${mc} merchant credits\n` : '') +
+      (pc ? `  • +${pc} sub-promoter credits\n` : '') +
+      '\nContinue?'
+    )) return;
+    setBulkSubmitting(true);
+    try {
+      const { data: res } = await api.post('/admin/promoters/bulk-recharge', {
+        merchant_credits: mc,
+        promoter_credits: pc,
+      });
+      const info = res?.data || res;
+      toast.success(`Applied to ${info.modified ?? info.matched ?? 0} promoters`);
+      setBulkMerchantCredits('');
+      setBulkPromoterCredits('');
+      setShowBulkCredit(false);
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Bulk recharge failed');
+    } finally {
+      setBulkSubmitting(false);
+    }
   };
 
   const getStatusVariant = (s) => ({ active: 'success', inactive: 'danger', pending: 'warning' }[s?.toLowerCase()] || 'default');
@@ -179,6 +283,7 @@ export default function PromoterManager() {
     {
       key: 'actions',
       label: 'Actions',
+      exportable: false,
       render: (_, row) => (
         <div className="flex items-center gap-2">
           <button
@@ -234,33 +339,34 @@ export default function PromoterManager() {
             <p className="text-xs text-white/40">{promoters.length} total promoters</p>
           </div>
         </div>
-      </div>
-
-      <div className="mb-5 max-w-sm">
-        <Input
-          placeholder="Search by name, phone, ID, or referral code..."
-          icon={Search}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        <Button icon={Zap} onClick={() => setShowBulkCredit(true)}>
+          Bulk Credit All
+        </Button>
       </div>
 
       {error ? (
         <div className="text-center py-8 text-red-400 text-sm">{error}</div>
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title={search ? 'No results found' : 'No promoters yet'}
-          description={search ? 'Try adjusting your search query.' : 'Promoters will appear here once they register.'}
-        />
       ) : (
-        <DataTable columns={columns} data={filtered} />
+        <DataTable
+          columns={columns}
+          data={promoters}
+          title="Promoters"
+          exportFilename="promoters"
+          searchable
+          searchFields={['name', 'phone', 'employee_id', 'referral_code', 'email']}
+          searchPlaceholder="Search by name, phone, ID, or referral code..."
+          exportable
+          onDelete={handleDelete}
+          onBulkDelete={handleBulkDelete}
+          onDeleteAll={handleDeleteAll}
+          emptyMessage="No promoters yet. They'll appear here once they register."
+        />
       )}
 
       {/* Detail Modal */}
       <Modal
         isOpen={!!selectedPromoter}
-        onClose={() => { setSelectedPromoter(null); setShowRecharge(false); }}
+        onClose={() => { setSelectedPromoter(null); setShowRecharge(false); setShowPasswordChange(false); setNewPassword(''); }}
         title="Promoter Details"
         size="md"
       >
@@ -284,36 +390,31 @@ export default function PromoterManager() {
             </div>
 
             {/* Info grid */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                <div className="flex items-center gap-2 mb-1">
-                  <Hash className="w-3.5 h-3.5 text-white/30" />
-                  <p className="text-[10px] text-white/30 uppercase tracking-wider">Employee ID</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Employee ID', value: selectedPromoter.employee_id || '-', icon: Hash },
+                { label: 'Status', value: selectedPromoter.status || 'N/A', badge: true, variant: getStatusVariant(selectedPromoter.status) },
+                { label: 'Payment', value: selectedPromoter.payment_status || 'N/A', badge: true, variant: selectedPromoter.payment_status === 'paid' ? 'success' : 'warning' },
+                { label: 'Rank', value: selectedPromoter.rank === 'area_manager' ? 'Area Manager' : (selectedPromoter.rank || 'promoter'), badge: true, variant: getRankVariant(selectedPromoter.rank) },
+                { label: 'Phone', value: selectedPromoter.phone || '-' },
+                { label: 'Email', value: selectedPromoter.email || '-' },
+                { label: 'Address', value: selectedPromoter.address || '-' },
+                { label: 'Joined', value: selectedPromoter.createdAt ? new Date(selectedPromoter.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-' },
+              ].map((item, i) => (
+                <div key={i} className="bg-white/5 rounded-xl p-3 border border-white/5">
+                  <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">{item.label}</p>
+                  {item.badge ? <Badge text={item.value} variant={item.variant} /> : <p className="text-sm font-semibold text-white truncate">{item.value}</p>}
                 </div>
-                <p className="text-sm font-semibold text-white">{selectedPromoter.employee_id || '-'}</p>
-              </div>
-              <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                <div className="flex items-center gap-2 mb-1">
-                  <Shield className="w-3.5 h-3.5 text-white/30" />
-                  <p className="text-[10px] text-white/30 uppercase tracking-wider">Status</p>
-                </div>
-                <Badge text={selectedPromoter.status || 'N/A'} variant={getStatusVariant(selectedPromoter.status)} />
-              </div>
-              <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                <div className="flex items-center gap-2 mb-1">
-                  <CreditCard className="w-3.5 h-3.5 text-white/30" />
-                  <p className="text-[10px] text-white/30 uppercase tracking-wider">Payment</p>
-                </div>
-                <Badge text={selectedPromoter.payment_status || 'N/A'} variant={selectedPromoter.payment_status === 'paid' ? 'success' : 'warning'} />
-              </div>
-              <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                <div className="flex items-center gap-2 mb-1">
-                  <Shield className="w-3.5 h-3.5 text-white/30" />
-                  <p className="text-[10px] text-white/30 uppercase tracking-wider">Rank</p>
-                </div>
-                <Badge text={selectedPromoter.rank === 'area_manager' ? 'Area Manager' : (selectedPromoter.rank || 'promoter')} variant={getRankVariant(selectedPromoter.rank)} />
-              </div>
+              ))}
             </div>
+
+            {/* Referred by */}
+            {selectedPromoter.referred_by_name && (
+              <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Referred By</p>
+                <p className="text-sm font-semibold text-white">{selectedPromoter.referred_by_name} ({selectedPromoter.referred_by_phone})</p>
+              </div>
+            )}
 
             {/* Onboarded counts + remaining credits */}
             <div className="grid grid-cols-2 gap-4">
@@ -485,6 +586,80 @@ export default function PromoterManager() {
               </p>
             </div>
 
+            {/* Change Password */}
+            <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-orange-400" />
+                  <p className="text-sm font-semibold text-white">Change Password</p>
+                </div>
+                {!showPasswordChange && (
+                  <Button size="sm" icon={Lock} onClick={() => setShowPasswordChange(true)}>
+                    Change
+                  </Button>
+                )}
+              </div>
+
+              <AnimatePresence>
+                {showPasswordChange && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex items-center gap-3 overflow-hidden"
+                  >
+                    <input
+                      type="text"
+                      placeholder="Enter new password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/30 outline-none focus:border-[#e94560]/60 transition-colors"
+                    />
+                    <Button
+                      icon={Lock}
+                      loading={changingPassword}
+                      onClick={handleChangePassword}
+                      disabled={!newPassword || newPassword.length < 4}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setShowPasswordChange(false); setNewPassword(''); }}
+                    >
+                      Cancel
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Rank toggle — gates the level-2 override commission for this promoter's downline. */}
+            <div className="flex gap-3 pt-2">
+              {selectedPromoter.rank === 'area_manager' ? (
+                <Button
+                  fullWidth
+                  variant="secondary"
+                  icon={ArrowDownToLine}
+                  loading={actionLoading}
+                  onClick={() => handleToggleRank(selectedPromoter)}
+                >
+                  Demote to Promoter
+                </Button>
+              ) : (
+                <Button
+                  fullWidth
+                  icon={Crown}
+                  loading={actionLoading}
+                  onClick={() => handleToggleRank(selectedPromoter)}
+                >
+                  Promote to Area Manager
+                </Button>
+              )}
+            </div>
+
             {/* Action buttons */}
             <div className="flex gap-3 pt-2">
               {selectedPromoter.status !== 'active' ? (
@@ -502,6 +677,61 @@ export default function PromoterManager() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Bulk credit modal */}
+      <Modal
+        isOpen={showBulkCredit}
+        onClose={() => setShowBulkCredit(false)}
+        title="Bulk Credit All Active Promoters"
+        size="sm"
+      >
+        <div className="space-y-5">
+          <p className="text-xs text-white/60">
+            Credits are added on top of current balances. Applies to every promoter with status=active.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-white/70 mb-1.5">Merchant onboarding credits</label>
+              <Input
+                type="number"
+                placeholder="e.g. 400"
+                value={bulkMerchantCredits}
+                onChange={(e) => setBulkMerchantCredits(e.target.value)}
+                icon={Store}
+              />
+              <p className="text-[11px] text-white/40 mt-1">Bumps max_shops_allowed for every active promoter.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-white/70 mb-1.5">Sub-promoter credits</label>
+              <Input
+                type="number"
+                placeholder="e.g. 300"
+                value={bulkPromoterCredits}
+                onChange={(e) => setBulkPromoterCredits(e.target.value)}
+                icon={UserPlus}
+              />
+              <p className="text-[11px] text-white/40 mt-1">Bumps max_promoters_allowed for every active promoter.</p>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              fullWidth
+              icon={Zap}
+              loading={bulkSubmitting}
+              onClick={handleBulkRecharge}
+              disabled={(!Number(bulkMerchantCredits) && !Number(bulkPromoterCredits))}
+            >
+              Apply to All Active
+            </Button>
+            <Button variant="ghost" onClick={() => setShowBulkCredit(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
       </Modal>
     </motion.div>
   );

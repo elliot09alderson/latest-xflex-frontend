@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset
+  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+>
+  <url>
+    <loc>https://zxcom.in/</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://zxcom.in/about</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://zxcom.in/contact</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://zxcom.in/shipping</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://zxcom.in/refund</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://zxcom.in/terms</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://zxcom.in/privacy</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://zxcom.in/product/1</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://res.cloudinary.com/dbrpqazmg/image/upload/v1775708916/zxcom/products/women-tshirt-black.jpg</image:loc>
+      <image:title>ZXCOM Women Classic Black T-Shirt</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://zxcom.in/product/2</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://res.cloudinary.com/dbrpqazmg/image/upload/v1775708919/zxcom/products/men-tshirt-black.jpg</image:loc>
+      <image:title>ZXCOM Men Signature Black T-Shirt</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://zxcom.in/product/1</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://res.cloudinary.com/dbrpqazmg/image/upload/v1775708916/zxcom/products/women-tshirt-black.jpg</image:loc>
+      <image:title>ZXCOM Women Classic Black T-Shirt</image:title>
+    </image:image>
+  </url>
+  <url>
+    <loc>https://zxcom.in/product/2</loc>
+    <lastmod>2026-04-21</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://res.cloudinary.com/dbrpqazmg/image/upload/v1775708919/zxcom/products/men-tshirt-black.jpg</image:loc>
+      <image:title>ZXCOM Men Signature Black T-Shirt</image:title>
+    </image:image>
+  </url>
+</urlset>

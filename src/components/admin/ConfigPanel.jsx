@@ -8,15 +8,15 @@ import GlassCard from '../ui/GlassCard';
 import Button from '../ui/Button';
 import Spinner from '../ui/Spinner';
 
+// Only the keys that actually drive live business logic are exposed here.
+// Legacy flat-tier price/cap/max-shops fields from the pre-Pack era have been
+// removed because packs now source these values directly on purchase.
 const CONFIG_FIELDS = [
-  { key: 'commission_percentage', label: 'Commission Percentage', suffix: '%', type: 'number', step: '0.1' },
+  { key: 'commission_percentage', label: 'Level 1: Direct Promoter Commission', suffix: '%', type: 'number', step: '0.1' },
+  { key: 'area_manager_override_percent', label: 'Level 2: Area Manager Override', suffix: '%', type: 'number', step: '0.1' },
+  { key: 'ecom_merchant_commission_percent', label: 'Merchant Ecom Order Commission', suffix: '%', type: 'number', step: '0.1' },
   { key: 'area_manager_promoter_target', label: 'Area Manager Promoter Target', suffix: '', type: 'number' },
   { key: 'area_manager_shop_target', label: 'Area Manager Shop Target', suffix: '', type: 'number' },
-  { key: 'promoter_registration_fee', label: 'Promoter Registration Fee', prefix: '₹', type: 'number' },
-  { key: 'basic_plan_price', label: 'Basic Plan Price', prefix: '₹', type: 'number' },
-  { key: 'premium_plan_price', label: 'Premium Plan Price', prefix: '₹', type: 'number' },
-  { key: 'basic_plan_cap', label: 'Basic Plan Cap', suffix: '', type: 'number' },
-  { key: 'default_max_shops_per_promoter', label: 'Default Max Shops per Promoter', suffix: '', type: 'number' },
 ];
 
 function ConfigCard({ field, currentValue, onSave, delay }) {

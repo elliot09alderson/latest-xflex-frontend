@@ -11,6 +11,7 @@ export default function Input({
   name,
   required = false,
   disabled = false,
+  readOnly = false,
   className = '',
 }) {
   const [focused, setFocused] = useState(false);
@@ -44,6 +45,7 @@ export default function Input({
           onChange={onChange}
           required={required}
           disabled={disabled}
+          readOnly={readOnly}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           className={`

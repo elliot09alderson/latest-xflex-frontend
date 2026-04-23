@@ -7,6 +7,9 @@ import Spinner from '../../components/ui/Spinner';
 import SubmissionCounter from '../../components/merchant/SubmissionCounter';
 import CustomerList from '../../components/merchant/CustomerList';
 import MerchantWinners from '../../components/merchant/MerchantWinners';
+import SubscriptionCard from '../../components/merchant/SubscriptionCard';
+import WalletCard from '../../components/merchant/WalletCard';
+import DashboardBanners from '../../components/ui/DashboardBanners';
 
 const sidebarLinks = [
   { path: '/merchant', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -16,7 +19,7 @@ const sidebarLinks = [
 ];
 
 export default function MerchantDashboard() {
-  const { data, loading, error } = useFetch('/merchants/stats');
+  const { data, loading, error, refetch } = useFetch('/merchants/stats');
 
   const stats = data || {};
 
@@ -33,37 +36,46 @@ export default function MerchantDashboard() {
             <p className="text-sm text-red-400">{error}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatsCard
-              title="Total Customers"
-              value={stats.customers ?? 0}
-              icon={Users}
-              color="#3b82f6"
-              trend={stats.customer_trend}
+          <>
+            <DashboardBanners endpoint="/merchants/banners" />
+            <SubscriptionCard
+              subscription={stats.subscription}
+              status={stats.status}
+              onRenewed={refetch}
             />
-            <StatsCard
-              title="Submissions This Month"
-              value={stats.submissions ?? 0}
-              icon={Send}
-              color="#e94560"
-              trend={stats.submission_trend}
-            />
-            <StatsCard
-              title="Winners"
-              value={stats.winners ?? 0}
-              icon={Award}
-              color="#f59e0b"
-            />
-            <StatsCard
-              title="Plan Status"
-              value={
-                (stats.plan || 'basic').charAt(0).toUpperCase() +
-                (stats.plan || 'basic').slice(1)
-              }
-              icon={Crown}
-              color={stats.plan === 'premium' ? '#f59e0b' : '#3b82f6'}
-            />
-          </div>
+            <WalletCard />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatsCard
+                title="Total Customers"
+                value={stats.customers ?? 0}
+                icon={Users}
+                color="#3b82f6"
+                trend={stats.customer_trend}
+              />
+              <StatsCard
+                title="Submissions This Month"
+                value={stats.submissions ?? 0}
+                icon={Send}
+                color="#e94560"
+                trend={stats.submission_trend}
+              />
+              <StatsCard
+                title="Winners"
+                value={stats.winners ?? 0}
+                icon={Award}
+                color="#f59e0b"
+              />
+              <StatsCard
+                title="Plan Status"
+                value={
+                  (stats.plan || 'basic').charAt(0).toUpperCase() +
+                  (stats.plan || 'basic').slice(1)
+                }
+                icon={Crown}
+                color={stats.plan === 'premium' ? '#f59e0b' : '#3b82f6'}
+              />
+            </div>
+          </>
         )}
 
         {/* Submission counter + Customer list */}

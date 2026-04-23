@@ -39,6 +39,34 @@ export default function ContestList() {
     }
   }, [refetch]);
 
+  const handleDelete = async (row) => {
+    try {
+      await api.delete(`/admin/contests/${row._id || row.id}`);
+      toast.success('Contest deleted');
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete');
+    }
+  };
+  const handleBulkDelete = async (rows) => {
+    try {
+      await api.post('/admin/contests/bulk-delete', { ids: rows.map((r) => r._id || r.id) });
+      toast.success(`Deleted ${rows.length} contests`);
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Bulk delete failed');
+    }
+  };
+  const handleDeleteAll = async () => {
+    try {
+      await api.delete('/admin/contests');
+      toast.success('All contests deleted');
+      refetch();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Delete all failed');
+    }
+  };
+
   const handleViewEntries = useCallback(async (contest) => {
     const id = contest._id || contest.id;
     setEntriesModal(contest);
@@ -84,6 +112,7 @@ export default function ContestList() {
     {
       key: 'actions',
       label: 'Actions',
+      exportable: false,
       render: (_, row) => {
         const id = row._id || row.id;
         const isActive = row.status?.toLowerCase() === 'active';
@@ -141,14 +170,21 @@ export default function ContestList() {
 
       {error ? (
         <div className="text-center py-8 text-red-400 text-sm">{error}</div>
-      ) : contests.length === 0 ? (
-        <EmptyState
-          icon={Trophy}
-          title="No contests yet"
-          description="Create a contest above to get started."
-        />
       ) : (
-        <DataTable columns={columns} data={contests} />
+        <DataTable
+          columns={columns}
+          data={contests}
+          title="Contests"
+          exportFilename="contests"
+          searchable
+          searchFields={['title', 'status', 'target_audience', 'algorithm']}
+          searchPlaceholder="Search contests..."
+          exportable
+          onDelete={handleDelete}
+          onBulkDelete={handleBulkDelete}
+          onDeleteAll={handleDeleteAll}
+          emptyMessage="No contests yet. Create one above to get started."
+        />
       )}
 
       {/* Entries Modal */}
