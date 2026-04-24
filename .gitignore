@@ -17,6 +17,14 @@ dist-ssr
 .env.*
 !.env.example
 
+# Local notes / plaintext credentials — never commit
+../git.txt
+../users.txt
+../whatsleft.txt
+git.txt
+users.txt
+whatsleft.txt
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
