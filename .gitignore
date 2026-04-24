@@ -25,6 +25,9 @@ git.txt
 users.txt
 whatsleft.txt
 
+# Local shell scripts (deploy scripts contain server IPs / creds)
+*.sh
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
